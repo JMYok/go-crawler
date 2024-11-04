@@ -11,7 +11,7 @@ func main() {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		fmt.Println("fetch url error:%v", err)
+		fmt.Printf("fetch url error:%v\n", err)
 		return
 	}
 
@@ -25,7 +25,7 @@ func main() {
 	body, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		fmt.Println("read content failed:%v", err)
+		fmt.Printf("read content failed:%v\n", err)
 		return
 	}
 
