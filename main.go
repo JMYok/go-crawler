@@ -2,14 +2,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 	"io/ioutil"
 	"net/http"
-	"strings"
 )
 
 // tag v0.0.4
@@ -47,33 +48,25 @@ func DetermineEncoding(r *bufio.Reader) encoding.Encoding {
 	return e
 }
 
-// tag v0.0.3
+// tag v0.0.9
 func main() {
 	url := "https://www.thepaper.cn/"
-	resp, err := http.Get(url)
-
-	if err != nil {
-		fmt.Println("fetch url error:%v", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Error status code:%v", resp.StatusCode)
-	}
-
-	// 读取为字节流
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := Fetch(url)
 
 	if err != nil {
 		fmt.Printf("read content failed:%v\n", err)
 		return
 	}
 
-	numLinks := strings.Count(string(body), "<a")
-	fmt.Printf("homepage has %d links!\n", numLinks)
+	// 加载HTML文档
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		fmt.Printf("read content failed:%v\n", err)
+	}
 
-	isExist := strings.Contains(string(body), "AI")
-	fmt.Printf("是否存在AI:%v\n", isExist)
+	doc.Find("div.ant-row.card .ant-col.ant-col-6.card-col.card-nobottom a[target=_blank] h2").Each(func(i int, s *goquery.Selection) {
+		// 获取匹配标签中的文本
+		title := s.Text()
+		fmt.Printf("Review %d: %s\n", i, title)
+	})
 }
