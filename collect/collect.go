@@ -14,7 +14,30 @@ import (
 )
 
 type Fetcher interface {
-	Get(url string) ([]byte, error)
+	Get(url *Request) ([]byte, error)
+}
+
+type BaseFetch struct {
+}
+
+func (BaseFetch) Get(req *Request) ([]byte, error) {
+	resp, err := http.Get(req.Url)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Error status code:%d\n", resp.StatusCode)
+		return nil, err
+	}
+	bodyReader := bufio.NewReader(resp.Body)
+	e := DetermineEncoding(bodyReader)
+	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
+	return ioutil.ReadAll(utf8Reader)
 }
 
 type BrowserFetch struct {
@@ -22,7 +45,7 @@ type BrowserFetch struct {
 	Proxy   proxy.ProxyFunc
 }
 
-func (b BrowserFetch) Get(url string) ([]byte, error) {
+func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 	client := &http.Client{
 		Timeout: b.Timeout,
 	}
@@ -32,9 +55,14 @@ func (b BrowserFetch) Get(url string) ([]byte, error) {
 		transport.Proxy = b.Proxy
 		client.Transport = transport
 	}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", request.Url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get url failed:%v", err)
+	}
+
+	// 设置cookie
+	if len(request.Cookie) > 0 {
+		req.Header.Set("Cookie", request.Cookie)
 	}
 
 	// 模拟浏览器
