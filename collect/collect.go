@@ -8,7 +8,7 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 )
@@ -28,7 +28,12 @@ func (BaseFetch) Get(req *Request) ([]byte, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println("Error close reader", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("Error status code:%d\n", resp.StatusCode)
@@ -37,7 +42,7 @@ func (BaseFetch) Get(req *Request) ([]byte, error) {
 	bodyReader := bufio.NewReader(resp.Body)
 	e := DetermineEncoding(bodyReader)
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
-	return ioutil.ReadAll(utf8Reader)
+	return io.ReadAll(utf8Reader)
 }
 
 type BrowserFetch struct {
@@ -77,7 +82,7 @@ func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 	bodyReader := bufio.NewReader(resp.Body)
 	e := DetermineEncoding(bodyReader)
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
-	return ioutil.ReadAll(utf8Reader)
+	return io.ReadAll(utf8Reader)
 }
 
 func DetermineEncoding(r *bufio.Reader) encoding.Encoding {
