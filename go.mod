@@ -4,8 +4,10 @@ go 1.23
 
 require (
 	github.com/chromedp/chromedp v0.11.1
+	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.30.0
 	golang.org/x/text v0.19.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
@@ -16,5 +18,6 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )
