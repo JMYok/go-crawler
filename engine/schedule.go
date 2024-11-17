@@ -8,11 +8,21 @@ import (
 type ScheduleEngine struct {
 	requestCh chan *collect.Request
 	workerCh  chan *collect.Request
-	WorkCount int
-	Fetcher   collect.Fetcher
-	Logger    *zap.Logger
 	out       chan collect.ParseResult
-	Seeds     []*collect.Request
+	options
+}
+
+func NewSchedule(opts ...Option) *ScheduleEngine {
+	// 默认设置
+	options := defaultOptions
+
+	//自定义设置加入到options中
+	for _, opt := range opts {
+		opt(&options)
+	}
+	s := &ScheduleEngine{}
+	s.options = options
+	return s
 }
 
 func (s *ScheduleEngine) Run() {
