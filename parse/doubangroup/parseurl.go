@@ -32,7 +32,7 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 
 const ContentRe = `<div id=['"]content['"]>[\s\S]*?阳台[\s\S]*?</div>`
 
-// 存储当前url内容到request.items
+// 存储匹配url内容到request.items
 func GetContent(contents []byte, url string) collect.ParseResult {
 	re := regexp.MustCompile(ContentRe)
 
