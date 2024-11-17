@@ -32,6 +32,8 @@ func main() {
 		seeds = append(seeds, &collect.Request{
 			Url:       str,
 			WaitTime:  1 * time.Second,
+			Depth:     0,
+			MaxDepth:  1,
 			Cookie:    cookie,
 			ParseFunc: doubangroup.ParseURL,
 		})

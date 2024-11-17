@@ -20,8 +20,10 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 		result.Requests = append(
 			result.Requests,
 			&collect.Request{
-				Url:    u,
-				Cookie: req.Cookie,
+				Url:      u,
+				Cookie:   req.Cookie,
+				Depth:    req.Depth + 1,
+				MaxDepth: req.MaxDepth,
 				ParseFunc: func(c []byte, request *collect.Request) collect.ParseResult {
 					return GetContent(c, u)
 				},

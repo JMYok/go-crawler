@@ -68,6 +68,9 @@ func (s *ScheduleEngine) Schedule() {
 func (s *ScheduleEngine) CreateWork() {
 	for {
 		r := <-s.workerCh
+		if err := r.Check(); err != nil {
+			s.Logger.Error("check failed", zap.Error(err))
+		}
 		body, err := s.Fetcher.Get(r)
 		if err != nil {
 			s.Logger.Error("can't fetch ",
