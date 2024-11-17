@@ -16,7 +16,7 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 
 	for _, m := range matches {
 		u := string(m[1])
-		// 组装到一个新的 Request 中，用作下一步的爬取。
+		// 将匹配到的url组装到一个新的 Request 中，用作下一步的爬取。
 		result.Requests = append(
 			result.Requests,
 			&collect.Request{
@@ -30,8 +30,9 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 	return result
 }
 
-const ContentRe = `<div class="topic-content">[\s\S]*?阳台[\s\S]*?<div`
+const ContentRe = `<div id=['"]content['"]>[\s\S]*?阳台[\s\S]*?</div>`
 
+// 存储当前url内容到request.items
 func GetContent(contents []byte, url string) collect.ParseResult {
 	re := regexp.MustCompile(ContentRe)
 
