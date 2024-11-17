@@ -40,7 +40,6 @@ func (s *ScheduleEngine) Schedule() {
 
 			if len(reqQueue) > 0 {
 				req = reqQueue[0]
-				reqQueue = reqQueue[1:]
 				ch = s.workerCh
 			}
 			select {
@@ -49,6 +48,7 @@ func (s *ScheduleEngine) Schedule() {
 				reqQueue = append(reqQueue, r)
 			// 若req=nil，往 nil 通道中写入数据会陷入到堵塞的状态，直到接收到新的请求才会被唤醒。
 			case ch <- req:
+				reqQueue = reqQueue[1:]
 			}
 		}
 	}()

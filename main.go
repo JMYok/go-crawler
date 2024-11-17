@@ -44,7 +44,7 @@ func main() {
 	}
 
 	s := engine.ScheduleEngine{
-		WorkCount: 5,
+		WorkCount: 1,
 		Logger:    logger,
 		Fetcher:   f,
 		Seeds:     seeds,
