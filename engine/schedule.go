@@ -42,7 +42,12 @@ func (s *ScheduleEngine) Run() {
 
 // 从请求通道s.requestCh取请求到reqQueue，送到s.workerCh等待执行
 func (s *ScheduleEngine) Schedule() {
-	var reqQueue = s.Seeds
+	var reqQueue []*collect.Request
+	for _, seed := range s.Seeds {
+		seed.RootReq.Task = seed
+		seed.RootReq.Url = seed.Url
+		reqQueue = append(reqQueue, seed.RootReq)
+	}
 	go func() {
 		for {
 			var req *collect.Request
