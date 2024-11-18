@@ -3,6 +3,7 @@ package collect
 import (
 	"bufio"
 	"fmt"
+	"go-crawler/extensions"
 	"go-crawler/proxy"
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
@@ -14,6 +15,7 @@ import (
 	"time"
 )
 
+// 采集数据引擎
 type Fetcher interface {
 	Get(url *Request) ([]byte, error)
 }
@@ -72,10 +74,7 @@ func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 		req.Header.Set("Cookie", request.Task.Cookie)
 	}
 
-	// 模拟浏览器
-	mockApplePhone := "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1"
-	//mockAppleComp:= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36"
-	req.Header.Set("User-Agent", mockApplePhone)
+	req.Header.Set("User-Agent", extensions.GenerateRandomUA())
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
