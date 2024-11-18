@@ -18,16 +18,15 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 		u := string(m[1])
 		// 将匹配到的url组装到一个新的 Request 中，用作下一步的爬取。
 		result.Requests = append(
-			result.Requests,
-			&collect.Request{
-				Url:      u,
-				Cookie:   req.Cookie,
-				Depth:    req.Depth + 1,
-				MaxDepth: req.MaxDepth,
+			result.Requests, &collect.Request{
+				Task:  req.Task,
+				Url:   u,
+				Depth: req.Depth + 1,
 				ParseFunc: func(c []byte, request *collect.Request) collect.ParseResult {
 					return GetContent(c, u)
 				},
-			})
+			},
+		)
 	}
 	return result
 }
