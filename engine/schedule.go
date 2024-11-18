@@ -5,99 +5,142 @@ import (
 	"go.uber.org/zap"
 )
 
-type ScheduleEngine struct {
-	requestCh chan *collect.Request
-	workerCh  chan *collect.Request
-	out       chan collect.ParseResult
+type Crawler struct {
+	out chan collect.ParseResult
 	options
 }
 
-func NewSchedule(opts ...Option) *ScheduleEngine {
-	// 默认设置
-	options := defaultOptions
+type Scheduler interface {
+	Schedule()
+	Push(...*collect.Request)
+	Pull() *collect.Request
+}
 
-	//自定义设置加入到options中
+type ScheduleEngine struct {
+	requestCh chan *collect.Request
+	workerCh  chan *collect.Request
+	reqQueue  []*collect.Request
+	Logger    *zap.Logger
+}
+
+func NewEngine(opts ...Option) *Crawler {
+	options := defaultOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
+	e := &Crawler{}
+	out := make(chan collect.ParseResult)
+	e.out = out
+	e.options = options
+	return e
+}
+
+func NewSchedule() *ScheduleEngine {
 	s := &ScheduleEngine{}
-	s.options = options
+	requestCh := make(chan *collect.Request)
+	workerCh := make(chan *collect.Request)
+	s.requestCh = requestCh
+	s.workerCh = workerCh
 	return s
 }
 
-func (s *ScheduleEngine) Run() {
-	requestCh := make(chan *collect.Request)
-	workerCh := make(chan *collect.Request)
-	out := make(chan collect.ParseResult)
-	s.requestCh = requestCh
-	s.workerCh = workerCh
-	s.out = out
-	go s.Schedule()
-	// 实现多worker并行处理。（串行的从s.workerCh取任务）
-	for i := 0; i < s.WorkCount; i++ {
-		go s.CreateWork()
+func (e *Crawler) Run() {
+	go e.Schedule()
+	for i := 0; i < e.WorkCount; i++ {
+		go e.CreateWork()
 	}
-	s.HandleResult()
+	e.HandleResult()
+}
+
+func (s *ScheduleEngine) Push(reqs ...*collect.Request) {
+	for _, req := range reqs {
+		s.requestCh <- req
+	}
+}
+
+func (s *ScheduleEngine) Pull() *collect.Request {
+	r := <-s.workerCh
+	return r
+}
+
+func (s *ScheduleEngine) Output() *collect.Request {
+	r := <-s.workerCh
+	return r
 }
 
 // 从请求通道s.requestCh取请求到reqQueue，送到s.workerCh等待执行
 func (s *ScheduleEngine) Schedule() {
-	var reqQueue []*collect.Request
-	for _, seed := range s.Seeds {
+	for {
+		var req *collect.Request
+		var ch chan *collect.Request
+
+		if len(s.reqQueue) > 0 {
+			req = s.reqQueue[0]
+			ch = s.workerCh
+		}
+		select {
+		case r := <-s.requestCh:
+			s.reqQueue = append(s.reqQueue, r)
+		case ch <- req:
+			s.reqQueue = s.reqQueue[1:]
+		}
+	}
+}
+
+// 从seeds中取得Requests，启动调度
+func (e *Crawler) Schedule() {
+	var reqs []*collect.Request
+	for _, seed := range e.Seeds {
 		seed.RootReq.Task = seed
 		seed.RootReq.Url = seed.Url
-		reqQueue = append(reqQueue, seed.RootReq)
+		reqs = append(reqs, seed.RootReq)
 	}
-	go func() {
-		for {
-			var req *collect.Request
-			var ch chan *collect.Request
-
-			if len(reqQueue) > 0 {
-				req = reqQueue[0]
-				ch = s.workerCh
-			}
-			select {
-			// 收到新请求，阻塞终止，下一个循环就能取到req，从而执行ch <- req
-			case r := <-s.requestCh:
-				reqQueue = append(reqQueue, r)
-			// 若req=nil，往 nil 通道中写入数据会陷入到堵塞的状态，直到接收到新的请求才会被唤醒。
-			case ch <- req:
-				reqQueue = reqQueue[1:]
-			}
-		}
-	}()
+	go e.scheduler.Schedule()
+	go e.scheduler.Push(reqs...)
 }
 
 // 从s.workerCh取请求执行，结果放到s.out
-func (s *ScheduleEngine) CreateWork() {
+func (s *Crawler) CreateWork() {
 	for {
-		r := <-s.workerCh
+		r := s.scheduler.Pull()
 		if err := r.Check(); err != nil {
-			s.Logger.Error("check failed", zap.Error(err))
-		}
-		body, err := s.Fetcher.Get(r)
-		if err != nil {
-			s.Logger.Error("can't fetch ",
+			s.Logger.Error("check failed",
 				zap.Error(err),
 			)
 			continue
 		}
+		body, err := r.Task.Fetcher.Get(r)
+		if len(body) < 6000 {
+			s.Logger.Error("can't fetch ",
+				zap.Int("length", len(body)),
+				zap.String("url", r.Url),
+			)
+			continue
+		}
+		if err != nil {
+			s.Logger.Error("can't fetch ",
+				zap.Error(err),
+				zap.String("url", r.Url),
+			)
+			continue
+		}
 		result := r.ParseFunc(body, r)
+
+		if len(result.Requests) > 0 {
+			go s.scheduler.Push(result.Requests...)
+		}
+
 		s.out <- result
 	}
 }
 
-func (s *ScheduleEngine) HandleResult() {
+func (s *Crawler) HandleResult() {
 	for {
 		select {
 		case result := <-s.out:
-			for _, req := range result.Requests {
-				s.requestCh <- req
-			}
 			for _, item := range result.Items {
 				// todo: store
-				s.Logger.Sugar().Info("get result ", item)
+				s.Logger.Sugar().Info("get result: ", item)
 			}
 		}
 	}

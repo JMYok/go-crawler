@@ -68,8 +68,8 @@ func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 	}
 
 	// 设置cookie
-	if len(request.Cookie) > 0 {
-		req.Header.Set("Cookie", request.Cookie)
+	if len(request.Task.Cookie) > 0 {
+		req.Header.Set("Cookie", request.Task.Cookie)
 	}
 
 	// 模拟浏览器
