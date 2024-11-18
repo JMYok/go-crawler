@@ -3,10 +3,14 @@ package engine
 import (
 	"go-crawler/collect"
 	"go.uber.org/zap"
+	"sync"
 )
 
 type Crawler struct {
 	out chan collect.ParseResult
+	// 存储请求的唯一标识
+	Visited     map[string]bool
+	VisitedLock sync.Mutex
 	options
 }
 
@@ -29,6 +33,7 @@ func NewEngine(opts ...Option) *Crawler {
 		opt(&options)
 	}
 	e := &Crawler{}
+	e.Visited = make(map[string]bool, 100)
 	out := make(chan collect.ParseResult)
 	e.out = out
 	e.options = options
@@ -103,12 +108,19 @@ func (e *Crawler) Schedule() {
 func (s *Crawler) CreateWork() {
 	for {
 		r := s.scheduler.Pull()
-		if err := r.Check(); err != nil {
-			s.Logger.Error("check failed",
+		if err := r.CheckDepth(); err != nil {
+			s.Logger.Error("check  failed",
 				zap.Error(err),
 			)
 			continue
 		}
+		// 判断当前请求是否已被访问
+		if s.HasVisited(r) {
+			s.Logger.Debug("request has visited", zap.String("url:", r.Url))
+			continue
+		}
+		// 设置当前请求已被访问
+		s.StoreVisited(r)
 		body, err := r.Task.Fetcher.Get(r)
 		if len(body) < 6000 {
 			s.Logger.Error("can't fetch ",
@@ -143,5 +155,23 @@ func (s *Crawler) HandleResult() {
 				s.Logger.Sugar().Info("get result: ", item)
 			}
 		}
+	}
+}
+
+// 判断请求是否重复
+func (e *Crawler) HasVisited(r *collect.Request) bool {
+	e.VisitedLock.Lock()
+	defer e.VisitedLock.Unlock()
+	unique := r.Unique()
+	return e.Visited[unique]
+}
+
+func (e *Crawler) StoreVisited(reqs ...*collect.Request) {
+	e.VisitedLock.Lock()
+	defer e.VisitedLock.Unlock()
+
+	for _, r := range reqs {
+		unique := r.Unique()
+		e.Visited[unique] = true
 	}
 }
