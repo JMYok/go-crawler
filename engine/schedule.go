@@ -21,10 +21,11 @@ type Scheduler interface {
 }
 
 type ScheduleEngine struct {
-	requestCh chan *collect.Request
-	workerCh  chan *collect.Request
-	reqQueue  []*collect.Request
-	Logger    *zap.Logger
+	requestCh   chan *collect.Request
+	workerCh    chan *collect.Request
+	reqQueue    []*collect.Request
+	priReqQueue []*collect.Request
+	Logger      *zap.Logger
 }
 
 func NewEngine(opts ...Option) *Crawler {
@@ -73,21 +74,32 @@ func (s *ScheduleEngine) Output() *collect.Request {
 	return r
 }
 
-// 从请求通道s.requestCh取请求到reqQueue，送到s.workerCh等待执行
+// 从请求通道s.requestCh和优先队列s.priReqQueue取请求到reqQueue，送到s.workerCh等待执行
 func (s *ScheduleEngine) Schedule() {
+	// 放在请求外部，防止取到req后，没有走case ch <- req导致请求丢失的情况
+	var req *collect.Request
+	var ch chan *collect.Request
 	for {
-		var req *collect.Request
-		var ch chan *collect.Request
-
-		if len(s.reqQueue) > 0 {
+		if req == nil && len(s.priReqQueue) > 0 {
+			req = s.priReqQueue[0]
+			s.priReqQueue = s.priReqQueue[1:]
+			ch = s.workerCh
+		}
+		if req == nil && len(s.reqQueue) > 0 {
 			req = s.reqQueue[0]
+			s.reqQueue = s.reqQueue[1:]
 			ch = s.workerCh
 		}
 		select {
 		case r := <-s.requestCh:
-			s.reqQueue = append(s.reqQueue, r)
+			if r.Priority > 0 {
+				s.priReqQueue = append(s.priReqQueue, r)
+			} else {
+				s.reqQueue = append(s.reqQueue, r)
+			}
 		case ch <- req:
-			s.reqQueue = s.reqQueue[1:]
+			req = nil
+			ch = nil
 		}
 	}
 }
