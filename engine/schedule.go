@@ -11,6 +11,8 @@ type Crawler struct {
 	// 存储请求的唯一标识
 	Visited     map[string]bool
 	VisitedLock sync.Mutex
+	failures    map[string]*collect.Request // 失败请求id -> 失败请求
+	failureLock sync.Mutex
 	options
 }
 
@@ -186,4 +188,21 @@ func (e *Crawler) StoreVisited(reqs ...*collect.Request) {
 		unique := r.Unique()
 		e.Visited[unique] = true
 	}
+}
+
+func (e *Crawler) SetFailure(req *collect.Request) {
+	if !req.Task.Reload {
+		e.VisitedLock.Lock()
+		unique := req.Unique()
+		delete(e.Visited, unique)
+		e.VisitedLock.Unlock()
+	}
+	e.failureLock.Lock()
+	defer e.failureLock.Unlock()
+	if _, ok := e.failures[req.Unique()]; !ok {
+		// 首次失败时，再重新执行一次
+		e.failures[req.Unique()] = req
+		e.scheduler.Push(req)
+	}
+	// todo: 失败2次，加载到失败队列中
 }
