@@ -1,53 +1,72 @@
 package doubangroup
 
 import (
+	"fmt"
 	"go-crawler/collect"
 	"regexp"
+	"time"
 )
 
-// 获取所有帖子的 URL
 const urlListRe = `(https://www.douban.com/group/topic/[0-9a-z]+/)"[^>]*>([^<]+)</a>`
+const ContentRe = `<div class="topic-content">[\s\S]*?阳台[\s\S]*?<div class="aside">`
 
-func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
+var DoubangroupTask = &collect.Task{
+	Name:     "find_douban_sun_room",
+	WaitTime: 1 * time.Second,
+	MaxDepth: 5,
+	Cookie:   "bid=TuWqA7AM2_4; viewed=\"1500149_26883690\"; _pk_id.100001.8cb4=939420b529734caa.1731404400.; __yadk_uid=eaEj42WRDNHKvtY84a4E4ic8v9KGYszX; __utmc=30149280; dbcl2=\"150361748:Qt1XBWORkVA\"; ck=gzyI; push_noty_num=0; push_doumail_num=0; __utmv=30149280.15036; __utmz=30149280.1731789209.5.4.utmcsr=accounts.douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/; _pk_ref.100001.8cb4=%5B%22%22%2C%22%22%2C1731929749%2C%22https%3A%2F%2Faccounts.douban.com%2F%22%5D; _pk_ses.100001.8cb4=1; __utma=30149280.1825385725.1728983070.1731918463.1731929749.11; __utmt=1; __utmb=30149280.14.5.1731929910346",
+	Rule: collect.RuleTree{
+		Root: func() []*collect.Request {
+			var roots []*collect.Request
+			for i := 0; i < 25; i += 25 {
+				str := fmt.Sprintf("https://www.douban.com/group/szsh/discussion?start=%d", i)
+				roots = append(roots, &collect.Request{
+					Priority: 1,
+					Url:      str,
+					Method:   "GET",
+					RuleName: "解析网站URL",
+				})
+			}
+			return roots
+		},
+		Trunk: map[string]*collect.Rule{
+			"解析网站URL": {ParseURL},
+			"解析阳台房":   {GetSunRoom},
+		},
+	},
+}
+
+func ParseURL(ctx *collect.Context) collect.ParseResult {
 	re := regexp.MustCompile(urlListRe)
 
-	matches := re.FindAllSubmatch(contents, -1)
+	matches := re.FindAllSubmatch(ctx.Body, -1)
 	result := collect.ParseResult{}
 
 	for _, m := range matches {
 		u := string(m[1])
-		// 将匹配到的url组装到一个新的 Request 中，用作下一步的爬取。
 		result.Requests = append(
 			result.Requests, &collect.Request{
-				Task:  req.Task,
-				Url:   u,
-				Depth: req.Depth + 1,
-				ParseFunc: func(c []byte, request *collect.Request) collect.ParseResult {
-					return GetContent(c, u)
-				},
-			},
-		)
+				Method:   "GET",
+				Task:     ctx.Req.Task,
+				Url:      u,
+				Depth:    ctx.Req.Depth + 1,
+				RuleName: "解析阳台房",
+			})
 	}
 	return result
 }
 
-const ContentRe = `<div id=['"]content['"]>[\s\S]*?阳台[\s\S]*?</div>`
-
-// 存储匹配url内容到request.items
-func GetContent(contents []byte, url string) collect.ParseResult {
+func GetSunRoom(ctx *collect.Context) collect.ParseResult {
 	re := regexp.MustCompile(ContentRe)
 
-	ok := re.Match(contents)
+	ok := re.Match(ctx.Body)
 	if !ok {
 		return collect.ParseResult{
 			Items: []interface{}{},
 		}
 	}
-
-	// 发现正文中有对应的文字，就将当前帖子的 URL 写入到 Items 当中
 	result := collect.ParseResult{
-		Items: []interface{}{url},
+		Items: []interface{}{ctx.Req.Url},
 	}
-
 	return result
 }

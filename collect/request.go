@@ -10,6 +10,7 @@ import (
 
 // 一个任务实例，
 type Task struct {
+	Name        string
 	Url         string
 	Cookie      string
 	WaitTime    time.Duration
@@ -19,6 +20,12 @@ type Task struct {
 	VisitedLock sync.Mutex
 	RootReq     *Request
 	Fetcher     Fetcher
+	Rule        RuleTree
+}
+
+type Context struct {
+	Body []byte
+	Req  *Request
 }
 
 // 单个请求
@@ -29,6 +36,7 @@ type Request struct {
 	Method    string
 	Depth     int
 	Priority  int
+	RuleName  string // 当前请采取的解析规则
 	ParseFunc func([]byte, *Request) ParseResult
 }
 

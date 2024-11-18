@@ -2,9 +2,30 @@ package engine
 
 import (
 	"go-crawler/collect"
+	"go-crawler/parse/doubangroup"
 	"go.uber.org/zap"
 	"sync"
 )
+
+func init() {
+	Store.Add(doubangroup.DoubangroupTask)
+}
+
+// 全局爬虫任务实例
+var Store = &CrawlerStore{
+	list: []*collect.Task{},
+	hash: map[string]*collect.Task{},
+}
+
+type CrawlerStore struct {
+	list []*collect.Task
+	hash map[string]*collect.Task
+}
+
+func (c *CrawlerStore) Add(task *collect.Task) {
+	c.hash[task.Name] = task
+	c.list = append(c.list, task)
+}
 
 type Crawler struct {
 	out chan collect.ParseResult
@@ -110,53 +131,66 @@ func (s *ScheduleEngine) Schedule() {
 func (e *Crawler) Schedule() {
 	var reqs []*collect.Request
 	for _, seed := range e.Seeds {
-		seed.RootReq.Task = seed
-		seed.RootReq.Url = seed.Url
-		reqs = append(reqs, seed.RootReq)
+		task := Store.hash[seed.Name]
+		task.Fetcher = seed.Fetcher
+		// 获取初始任务的 种子请求（初始url）
+		rootreqs := task.Rule.Root()
+		// 将请求和任务关联
+		for _, req := range rootreqs {
+			req.Task = task
+		}
+		reqs = append(reqs, rootreqs...)
 	}
 	go e.scheduler.Schedule()
 	go e.scheduler.Push(reqs...)
 }
 
 // 从s.workerCh取请求执行，结果放到s.out
-func (s *Crawler) CreateWork() {
+func (e *Crawler) CreateWork() {
 	for {
-		r := s.scheduler.Pull()
+		r := e.scheduler.Pull()
 		if err := r.CheckDepth(); err != nil {
-			s.Logger.Error("check  failed",
+			e.Logger.Error("check  failed",
 				zap.Error(err),
 			)
 			continue
 		}
 		// 判断当前请求是否已被访问
-		if s.HasVisited(r) {
-			s.Logger.Debug("request has visited", zap.String("url:", r.Url))
+		if e.HasVisited(r) {
+			e.Logger.Debug("request has visited", zap.String("url:", r.Url))
 			continue
 		}
 		// 设置当前请求已被访问
-		s.StoreVisited(r)
+		e.StoreVisited(r)
 		body, err := r.Task.Fetcher.Get(r)
 		if len(body) < 6000 {
-			s.Logger.Error("can't fetch ",
+			e.Logger.Error("can't fetch ",
 				zap.Int("length", len(body)),
 				zap.String("url", r.Url),
 			)
 			continue
 		}
 		if err != nil {
-			s.Logger.Error("can't fetch ",
+			e.Logger.Error("can't fetch ",
 				zap.Error(err),
 				zap.String("url", r.Url),
 			)
 			continue
 		}
-		result := r.ParseFunc(body, r)
+
+		// 当前请求解析规则
+		rule := r.Task.Rule.Trunk[r.RuleName]
+
+		result := rule.ParseFunc(&collect.Context{
+			Body: body,
+			Req:  r,
+		})
 
 		if len(result.Requests) > 0 {
-			go s.scheduler.Push(result.Requests...)
+			go e.scheduler.Push(result.Requests...)
 		}
 
-		s.out <- result
+		e.out <- result
 	}
 }
 
