@@ -23,15 +23,16 @@ func main() {
 	}
 
 	var f collect.Fetcher = &collect.BrowserFetch{
-		Timeout: 3000 * time.Millisecond,
+		Timeout: 5000 * time.Millisecond,
 		Logger:  logger,
 		Proxy:   p,
 	}
 
-	// douban cookie
 	seeds := make([]*collect.Task, 0, 1000)
 	seeds = append(seeds, &collect.Task{
-		Name:    "find_douban_sun_room",
+		Property: collect.Property{
+			Name: "js_find_douban_sun_room",
+		},
 		Fetcher: f,
 	})
 

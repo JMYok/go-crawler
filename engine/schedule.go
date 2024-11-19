@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/robertkrimen/otto"
 	"go-crawler/collect"
 	"go-crawler/parse/doubangroup"
 	"go.uber.org/zap"
@@ -9,6 +10,7 @@ import (
 
 func init() {
 	Store.Add(doubangroup.DoubangroupTask)
+	Store.AddJSTask(doubangroup.DoubangroupJSTask)
 }
 
 // 全局爬虫任务实例
@@ -23,6 +25,98 @@ type CrawlerStore struct {
 }
 
 func (c *CrawlerStore) Add(task *collect.Task) {
+	c.hash[task.Name] = task
+	c.list = append(c.list, task)
+}
+
+// 用于动态规则添加请求。
+func AddJsReqs(jreqs []map[string]interface{}) []*collect.Request {
+	reqs := make([]*collect.Request, 0)
+
+	for _, jreq := range jreqs {
+		req := &collect.Request{}
+		u, ok := jreq["Url"].(string)
+		if !ok {
+			return nil
+		}
+		req.Url = u
+		req.RuleName, _ = jreq["RuleName"].(string)
+		req.Method, _ = jreq["Method"].(string)
+		req.Priority, _ = jreq["Priority"].(int64)
+		reqs = append(reqs, req)
+	}
+	return reqs
+}
+
+// 用于动态规则添加请求。
+func AddJsReq(jreq map[string]interface{}) []*collect.Request {
+	reqs := make([]*collect.Request, 0)
+	req := &collect.Request{}
+	u, ok := jreq["Url"].(string)
+	if !ok {
+		return nil
+	}
+	req.Url = u
+	req.RuleName, _ = jreq["RuleName"].(string)
+	req.Method, _ = jreq["Method"].(string)
+	req.Priority, _ = jreq["Priority"].(int64)
+	reqs = append(reqs, req)
+	return reqs
+}
+
+func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
+	task := &collect.Task{
+		Property: m.Property,
+	}
+
+	task.Rule.Root = func() ([]*collect.Request, error) {
+		vm := otto.New()
+
+		// 将 Go 原生函数注册到 JS 虚拟机中
+		vm.Set("AddJsReq", AddJsReqs)
+
+		// 执行js脚本,返回了生成的请求数组
+		v, err := vm.Eval(m.Root)
+		if err != nil {
+			return nil, err
+		}
+
+		//  转换为go数据结构
+		e, err := v.Export()
+		if err != nil {
+			return nil, err
+		}
+		return e.([]*collect.Request), nil
+	}
+
+	for _, r := range m.Rules {
+		//使用了闭包，方便后续执行 parse 脚本并最后返回解析后的 collect.ParseResult 结果
+		parseFunc := func(parse string) func(ctx *collect.Context) (collect.ParseResult, error) {
+			return func(ctx *collect.Context) (collect.ParseResult, error) {
+				vm := otto.New()
+				vm.Set("ctx", ctx)
+				v, err := vm.Eval(parse)
+				if err != nil {
+					return collect.ParseResult{}, err
+				}
+				e, err := v.Export()
+				if err != nil {
+					return collect.ParseResult{}, err
+				}
+				if e == nil {
+					return collect.ParseResult{}, err
+				}
+				return e.(collect.ParseResult), err
+			}
+		}(r.ParseFunc)
+		if task.Rule.Trunk == nil {
+			task.Rule.Trunk = make(map[string]*collect.Rule, 0)
+		}
+		task.Rule.Trunk[r.Name] = &collect.Rule{
+			parseFunc,
+		}
+	}
+
 	c.hash[task.Name] = task
 	c.list = append(c.list, task)
 }
@@ -134,7 +228,13 @@ func (e *Crawler) Schedule() {
 		task := Store.hash[seed.Name]
 		task.Fetcher = seed.Fetcher
 		// 获取初始任务的 种子请求（初始url）
-		rootreqs := task.Rule.Root()
+		rootreqs, err := task.Rule.Root()
+		if err != nil {
+			e.Logger.Error("get root failed",
+				zap.Error(err),
+			)
+			continue
+		}
 		// 将请求和任务关联
 		for _, req := range rootreqs {
 			req.Task = task
@@ -181,10 +281,17 @@ func (e *Crawler) CreateWork() {
 		// 当前请求解析规则
 		rule := r.Task.Rule.Trunk[r.RuleName]
 
-		result := rule.ParseFunc(&collect.Context{
-			Body: body,
-			Req:  r,
+		result, err := rule.ParseFunc(&collect.Context{
+			body,
+			r,
 		})
+
+		if err != nil {
+			e.Logger.Error("ParseFunc failed ",
+				zap.Error(err),
+				zap.String("url", r.Url),
+			)
+		}
 
 		if len(result.Requests) > 0 {
 			go e.scheduler.Push(result.Requests...)
