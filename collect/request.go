@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"go-crawler/collector"
 	"regexp"
 	"sync"
 	"time"
@@ -67,6 +68,21 @@ func (c *Context) OutputJS(reg string) ParseResult {
 	return result
 }
 
+func (c *Context) GetRule(ruleName string) *Rule {
+	return c.Req.Task.Rule.Trunk[ruleName]
+}
+
+// 将数据封装为collector.OutputData,用于之后存储
+func (c *Context) Output(data interface{}) *collector.OutputData {
+	res := &collector.OutputData{}
+	res.Data = make(map[string]interface{})
+	res.Data["Rule"] = c.Req.RuleName
+	res.Data["Data"] = data
+	res.Data["Url"] = c.Req.Url
+	res.Data["Time"] = time.Now().Format("2006-01-02 15:04:05")
+	return res
+}
+
 // 单个请求
 type Request struct {
 	unique    string
@@ -77,6 +93,7 @@ type Request struct {
 	Priority  int64
 	RuleName  string // 当前请采取的解析规则
 	ParseFunc func([]byte, *Request) ParseResult
+	TmpData   *Temp
 }
 
 type ParseResult struct {

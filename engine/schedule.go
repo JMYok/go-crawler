@@ -3,12 +3,15 @@ package engine
 import (
 	"github.com/robertkrimen/otto"
 	"go-crawler/collect"
+	"go-crawler/parse/doubanbook"
 	"go-crawler/parse/doubangroup"
 	"go.uber.org/zap"
 	"sync"
 )
 
+// 注册任务
 func init() {
+	Store.Add(doubanbook.DoubanBookTask)
 	Store.Add(doubangroup.DoubangroupTask)
 	Store.AddJSTask(doubangroup.DoubangroupJSTask)
 }
@@ -113,7 +116,7 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 			task.Rule.Trunk = make(map[string]*collect.Rule, 0)
 		}
 		task.Rule.Trunk[r.Name] = &collect.Rule{
-			parseFunc,
+			ParseFunc: parseFunc,
 		}
 	}
 
@@ -225,6 +228,7 @@ func (s *ScheduleEngine) Schedule() {
 func (e *Crawler) Schedule() {
 	var reqs []*collect.Request
 	for _, seed := range e.Seeds {
+		// 根据seed.Name，从Store中取得具体task
 		task := Store.hash[seed.Name]
 		task.Fetcher = seed.Fetcher
 		// 获取初始任务的 种子请求（初始url）
