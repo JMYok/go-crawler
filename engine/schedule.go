@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/robertkrimen/otto"
 	"go-crawler/collect"
+	"go-crawler/collector"
 	"go-crawler/parse/doubanbook"
 	"go-crawler/parse/doubangroup"
 	"go.uber.org/zap"
@@ -19,16 +20,21 @@ func init() {
 // 全局爬虫任务实例
 var Store = &CrawlerStore{
 	list: []*collect.Task{},
-	hash: map[string]*collect.Task{},
+	Hash: map[string]*collect.Task{},
+}
+
+// 得到字段名
+func GetFields(taskName string, ruleName string) []string {
+	return Store.Hash[taskName].Rule.Trunk[ruleName].ItemFields
 }
 
 type CrawlerStore struct {
 	list []*collect.Task
-	hash map[string]*collect.Task
+	Hash map[string]*collect.Task
 }
 
 func (c *CrawlerStore) Add(task *collect.Task) {
-	c.hash[task.Name] = task
+	c.Hash[task.Name] = task
 	c.list = append(c.list, task)
 }
 
@@ -120,7 +126,7 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 		}
 	}
 
-	c.hash[task.Name] = task
+	c.Hash[task.Name] = task
 	c.list = append(c.list, task)
 }
 
@@ -227,10 +233,14 @@ func (s *ScheduleEngine) Schedule() {
 // 从seeds中取得Requests，启动调度
 func (e *Crawler) Schedule() {
 	var reqs []*collect.Request
+
+	// 根据seed.Name，从Store中取得具体task
 	for _, seed := range e.Seeds {
-		// 根据seed.Name，从Store中取得具体task
-		task := Store.hash[seed.Name]
+		task := Store.Hash[seed.Name]
 		task.Fetcher = seed.Fetcher
+		task.Storage = seed.Storage
+		task.Logger = e.Logger
+		task.Reload = seed.Reload
 		// 获取初始任务的 种子请求（初始url）
 		rootreqs, err := task.Rule.Root()
 		if err != nil {
@@ -310,7 +320,12 @@ func (s *Crawler) HandleResult() {
 		select {
 		case result := <-s.out:
 			for _, item := range result.Items {
-				// todo: store
+				switch d := item.(type) {
+				case *collector.DataCell:
+					name := d.GetTaskName()
+					task := Store.Hash[name]
+					task.Storage.Save(d)
+				}
 				s.Logger.Sugar().Info("get result: ", item)
 			}
 		}

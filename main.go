@@ -2,6 +2,8 @@ package main
 
 import (
 	"go-crawler/collect"
+	"go-crawler/collector"
+	"go-crawler/collector/sqlstorage"
 	"go-crawler/engine"
 	"go-crawler/log"
 	"go-crawler/proxy"
@@ -28,12 +30,23 @@ func main() {
 		Proxy:   p,
 	}
 
+	var storage collector.Storage
+	storage, err = sqlstorage.New(
+		sqlstorage.WithSqlUrl("root:@tcp(127.0.0.1:3306)/go_crawler?charset=utf8"),
+		sqlstorage.WithLogger(logger.Named("sqlDB")),
+		sqlstorage.WithBatchCount(2),
+	)
+	if err != nil {
+		logger.Error("create sqlstorage failed")
+		return
+	}
 	seeds := make([]*collect.Task, 0, 1000)
 	seeds = append(seeds, &collect.Task{
 		Property: collect.Property{
 			Name: "douban_book_list",
 		},
 		Fetcher: f,
+		Storage: storage,
 	})
 
 	s := engine.NewEngine(

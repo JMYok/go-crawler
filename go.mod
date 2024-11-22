@@ -4,6 +4,7 @@ go 1.23
 
 require (
 	github.com/chromedp/chromedp v0.11.1
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/robertkrimen/otto v0.5.1
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.27.0
@@ -13,6 +14,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/chromedp/cdproto v0.0.0-20241022234722-4d5d5faf59fb // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

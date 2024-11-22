@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"go-crawler/collector"
+	"go.uber.org/zap"
 	"regexp"
 	"sync"
 	"time"
@@ -26,7 +27,9 @@ type Task struct {
 	VisitedLock sync.Mutex
 	RootReq     *Request
 	Fetcher     Fetcher
+	Storage     collector.Storage // 存储引擎和任务绑定，实现存储和任务的解耦
 	Rule        RuleTree
+	Logger      *zap.Logger
 }
 
 type Context struct {
@@ -72,10 +75,11 @@ func (c *Context) GetRule(ruleName string) *Rule {
 	return c.Req.Task.Rule.Trunk[ruleName]
 }
 
-// 将数据封装为collector.OutputData,用于之后存储
-func (c *Context) Output(data interface{}) *collector.OutputData {
-	res := &collector.OutputData{}
+// 将数据封装为collector.DataCell,用于之后存储
+func (c *Context) Output(data interface{}) *collector.DataCell {
+	res := &collector.DataCell{}
 	res.Data = make(map[string]interface{})
+	res.Data["Task"] = c.Req.Task.Name
 	res.Data["Rule"] = c.Req.RuleName
 	res.Data["Data"] = data
 	res.Data["Url"] = c.Req.Url
