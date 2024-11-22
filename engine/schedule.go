@@ -6,6 +6,7 @@ import (
 	"go-crawler/collector"
 	"go-crawler/parse/doubanbook"
 	"go-crawler/parse/doubangroup"
+	"go-crawler/parse/geekbang"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -14,6 +15,7 @@ import (
 func init() {
 	Store.Add(doubanbook.DoubanBookTask)
 	Store.Add(doubangroup.DoubangroupTask)
+	Store.Add(geekbang.GeekBangTask)
 	Store.AddJSTask(doubangroup.DoubangroupJSTask)
 }
 
