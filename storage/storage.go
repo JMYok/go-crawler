@@ -1,4 +1,4 @@
-package collector
+package storage
 
 // 对应数据库中的行
 type DataCell struct {

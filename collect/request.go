@@ -4,20 +4,23 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	"go-crawler/collector"
+	"go-crawler/limiter"
+	"go-crawler/storage"
 	"go.uber.org/zap"
+	"golang.org/x/net/context"
+	"math/rand"
 	"regexp"
 	"sync"
 	"time"
 )
 
 type Property struct {
-	Name     string        `json:"name"` // 任务名称，应保证唯一性
-	Url      string        `json:"url"`
-	Cookie   string        `json:"cookie"`
-	WaitTime time.Duration `json:"wait_time"`
-	Reload   bool          `json:"reload"` // 网站是否可以重复爬取
-	MaxDepth int64         `json:"max_depth"`
+	Name     string `json:"name"` // 任务名称，应保证唯一性
+	Url      string `json:"url"`
+	Cookie   string `json:"cookie"`
+	WaitTime int64  `json:"wait_time"` // 随机休眠时间WaitTime*1000 milliseconds
+	Reload   bool   `json:"reload"`    // 网站是否可以重复爬取
+	MaxDepth int64  `json:"max_depth"`
 }
 
 // 一个任务实例，
@@ -27,8 +30,9 @@ type Task struct {
 	VisitedLock sync.Mutex
 	RootReq     *Request
 	Fetcher     Fetcher
-	Storage     collector.Storage // 存储引擎和任务绑定，实现存储和任务的解耦
+	Storage     storage.Storage // 存储引擎和任务绑定，实现存储和任务的解耦
 	Rule        RuleTree
+	Limit       limiter.RateLimiter //限流器
 	Logger      *zap.Logger
 }
 
@@ -76,8 +80,8 @@ func (c *Context) GetRule(ruleName string) *Rule {
 }
 
 // 将数据封装为collector.DataCell,用于之后存储
-func (c *Context) Output(data interface{}) *collector.DataCell {
-	res := &collector.DataCell{}
+func (c *Context) Output(data interface{}) *storage.DataCell {
+	res := &storage.DataCell{}
 	res.Data = make(map[string]interface{})
 	res.Data["Task"] = c.Req.Task.Name
 	res.Data["Rule"] = c.Req.RuleName
@@ -103,6 +107,16 @@ type Request struct {
 type ParseResult struct {
 	Requests []*Request    //当前url请求中，包含的新的请求
 	Items    []interface{} //获取到的数据
+}
+
+func (r *Request) Fetch() ([]byte, error) {
+	if err := r.Task.Limit.Wait(context.Background()); err != nil {
+		return nil, err
+	}
+	// 随机休眠，模拟人类行为
+	sleepTime := rand.Int63n(r.Task.WaitTime * 1000)
+	time.Sleep(time.Duration(sleepTime) * time.Millisecond)
+	return r.Task.Fetcher.Get(r)
 }
 
 func (r *Request) CheckDepth() error {

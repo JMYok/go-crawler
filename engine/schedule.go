@@ -3,10 +3,10 @@ package engine
 import (
 	"github.com/robertkrimen/otto"
 	"go-crawler/collect"
-	"go-crawler/collector"
 	"go-crawler/parse/doubanbook"
 	"go-crawler/parse/doubangroup"
 	"go-crawler/parse/geekbang"
+	"go-crawler/storage"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -243,6 +243,7 @@ func (e *Crawler) Schedule() {
 		task.Storage = seed.Storage
 		task.Logger = e.Logger
 		task.Reload = seed.Reload
+		task.Limit = seed.Limit
 		// 获取初始任务的 种子请求（初始url）
 		rootreqs, err := task.Rule.Root()
 		if err != nil {
@@ -278,7 +279,7 @@ func (e *Crawler) CreateWork() {
 		}
 		// 设置当前请求已被访问
 		e.StoreVisited(r)
-		body, err := r.Task.Fetcher.Get(r)
+		body, err := r.Fetch()
 		if len(body) < 6000 {
 			e.Logger.Error("can't fetch ",
 				zap.Int("length", len(body)),
@@ -323,7 +324,7 @@ func (s *Crawler) HandleResult() {
 		case result := <-s.out:
 			for _, item := range result.Items {
 				switch d := item.(type) {
-				case *collector.DataCell:
+				case *storage.DataCell:
 					name := d.GetTaskName()
 					task := Store.Hash[name]
 					task.Storage.Save(d)
